@@ -4,3 +4,4 @@ pyttsx3
 SpeechRecognition
 pyaudio
 python-docx
+python-dotenv
