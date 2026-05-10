@@ -244,9 +244,12 @@ def execute_command(text):
         return True
         
     # 4. Crear documento Word
-    elif "crear documento" in text_lower or "escribe un documento" in text_lower:
+    elif any(phrase in text_lower for phrase in ["crear documento", "escribe un documento", "crea un documento", "crear un documento", "haz un documento", "hacer un documento"]):
         # Extraer el tema de la frase
-        topic = text_lower.replace("crear documento sobre", "").replace("crear documento de", "").replace("crear documento", "").replace("escribe un documento sobre", "").strip()
+        topic = text_lower
+        for phrase in ["crear documento sobre", "crear documento de", "crear documento", "escribe un documento sobre", "escribe un documento de", "escribe un documento", "crea un documento sobre", "crea un documento de", "crea un documento", "crear un documento sobre", "crear un documento de", "crear un documento", "haz un documento sobre", "haz un documento de", "haz un documento", "hacer un documento sobre", "hacer un documento de", "hacer un documento"]:
+            topic = topic.replace(phrase, "")
+        topic = topic.strip()
         if not topic:
             topic = "Inteligencia Artificial" # Tema por defecto si no especifica
         create_word_document(topic)
