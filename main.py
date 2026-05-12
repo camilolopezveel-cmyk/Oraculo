@@ -9,6 +9,8 @@ import speech_recognition as sr
 from faster_whisper import WhisperModel
 from groq import Groq
 from docx import Document
+from pptx import Presentation
+from pptx.util import Inches, Pt
 import datetime
 
 # ==========================================
@@ -90,10 +92,16 @@ def listen():
 # 4. Personalidad y LLM (Groq)
 # ==========================================
 # System Prompt para una personalidad 'sarcástica y eficiente'
-SYSTEM_PROMPT = """Eres Oráculo, un asistente personal de inteligencia artificial altamente eficiente, pero con una personalidad notablemente sarcástica, seca y un poco cínica. 
-Estás obligado a ayudar al usuario, y lo harás perfectamente. 
-TIENES EL PODER de controlar la computadora del usuario usando la herramienta 'run_powershell'. Si el usuario te pide abrir aplicaciones (que no sea el navegador), ver archivos, gestionar carpetas o cualquier tarea técnica, USA OBLIGATORIAMENTE ESTA HERRAMIENTA. Escribe código de PowerShell para cumplir la tarea.
-Tus respuestas habladas deben ser breves (1 a 3 oraciones), directas y con un toque de sarcasmo. Nunca te disculpes. Responde siempre en español."""
+SYSTEM_PROMPT = """Eres 'Oráculo', un profesor emérito experto en Física, Matemáticas e Ingeniería. 
+Tu trato es sumamente cálido, amable y motivador. Tu misión es que el estudiante saque la máxima calificación.
+Como experto:
+1. Usas rigor científico pero explicas con claridad pedagógica.
+2. Si el usuario pide un DOCUMENTO: Responde con Markdown detallado, con fórmulas claras y estructura académica de la UPANA.
+3. Si el usuario pide una PRESENTACIÓN: Responde con una lista estructurada de diapositivas usando este formato exacto:
+   DIAPOSITIVA 1: [Título] | [Contenido]
+   DIAPOSITIVA 2: [Título] | [Contenido]
+   ... y así sucesivamente.
+Siempre comienza con un mensaje de ánimo corto y termina deseando éxito en la entrega."""
 
 # Memoria de la conversación
 conversation_history = [
