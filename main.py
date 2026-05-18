@@ -254,33 +254,84 @@ def think(user_text):
 # 5. Ejecución de Comandos Básicos
 # ==========================================
 def create_word_document(topic):
-    speak(f"Redactando un documento sobre {topic}. Dale un momento a mi cerebro...")
+    speak(f"Redactando un documento extenso sobre {topic}. Este proceso tomará varios minutos, ya que lo generaré por capítulos. Por favor, sé paciente...")
     
-    prompt = f"Escribe un ensayo detallado y profesional sobre el siguiente tema: {topic}. No incluyas saludos ni comentarios adicionales, solo el contenido del texto."
+    # 1. Generar esquema
+    outline_prompt = f"""Crea un esquema MUY DETALLADO para un documento exhaustivo, largo y profesional sobre el tema: '{topic}'. 
+El documento final debe ser muy extenso (el equivalente a muchas páginas).
+Debe incluir una Introducción, múltiples secciones de Desarrollo profundo, una Conclusión y una Bibliografía.
+Devuelve ÚNICAMENTE una lista de títulos de secciones, cada uno en una nueva línea, sin viñetas, sin números, y sin ningún texto adicional.
+Ejemplo del formato exacto esperado:
+Introducción
+Contexto histórico
+[... más secciones ...]
+Conclusión
+Bibliografía
+"""
     try:
-        # Llamamos a Groq para generar el texto extenso
-        response = groq_client.chat.completions.create(
+        response_outline = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": outline_prompt}],
             temperature=0.7,
-            max_tokens=8000
+            max_tokens=2000
         )
-        content = response.choices[0].message.content
+        outline_content = response_outline.choices[0].message.content.strip()
+        sections = [s.strip() for s in outline_content.split('\n') if s.strip()]
         
-        # Crear el documento Word
+        # Limpiar posibles asteriscos o números generados por el LLM
+        import re
+        sections = [re.sub(r'^[\d\.\-\*\s]+', '', s).strip() for s in sections]
+        
+        if not sections:
+            raise ValueError("El esquema generado está vacío.")
+            
+        print(f"\nEsquema generado ({len(sections)} secciones):")
+        for i, s in enumerate(sections):
+            print(f"{i+1}. {s}")
+        
+        # 2. Crear documento e iterar por secciones
         doc = Document()
         doc.add_heading(topic.title(), 0)
-        doc.add_paragraph(content)
         
-        # Guardar en el escritorio
+        for idx, section in enumerate(sections, 1):
+            print(f"\nGenerando sección {idx}/{len(sections)}: {section}...")
+            # Un pequeño mensaje para que el usuario sepa que Oráculo sigue vivo
+            if idx % 3 == 0:
+                speak(f"Avanzando con el documento. Generando el capítulo {idx} de {len(sections)}: {section}...")
+                
+            section_prompt = f"""Estás escribiendo un documento universitario, extenso y riguroso sobre el tema general: '{topic}'.
+Escribe AHORA MISMO y de forma MUY EXHAUSTIVA la sección titulada específicamente: '{section}'.
+Asegúrate de proporcionar muchísima información, detalles, análisis y ejemplos. Escribe la mayor cantidad de párrafos posibles para hacer esta sección verdaderamente larga y profunda.
+NO incluyas el título de la sección al inicio (yo me encargo de eso). NO incluyas saludos ni despedidas, ve directo al texto detallado."""
+
+            response_section = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": section_prompt}],
+                temperature=0.7,
+                max_tokens=8000
+            )
+            section_content = response_section.choices[0].message.content.strip()
+            
+            # Limpiar el título por si lo incluyó a pesar de la instrucción
+            if section_content.lower().startswith(section.lower()):
+                section_content = section_content[len(section):].strip()
+            
+            doc.add_heading(section, level=1)
+            doc.add_paragraph(section_content)
+            
+            # Pequeña pausa para no saturar la API
+            time.sleep(1)
+        
+        # 3. Guardar en el escritorio
         filename = f"Documento_{datetime.datetime.now().strftime('%H%M%S')}.docx"
         filepath = os.path.join(os.path.expanduser("~"), "Desktop", filename)
         doc.save(filepath)
         
-        speak(f"Trabajo terminado. He guardado el archivo en tu escritorio como {filename}.")
+        speak(f"Trabajo terminado con éxito. He generado un documento sumamente detallado con {len(sections)} secciones y lo he guardado en tu escritorio como {filename}.")
+        
     except Exception as e:
-        print(f"Error al crear documento: {e}")
-        speak("Tuve un pequeño problema técnico al generar el documento, pero no te preocupes, lo podemos intentar de nuevo.")
+        print(f"Error al crear documento iterativo: {e}")
+        speak("Tuve un problema técnico al generar un documento tan extenso. ¿Podemos intentarlo de nuevo más tarde?")
 
 def create_powerpoint_presentation(topic):
     speak(f"Preparando una presentación sobre {topic}. Por favor espera...")
