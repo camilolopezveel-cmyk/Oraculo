@@ -268,13 +268,17 @@ Contexto histórico
 Conclusión
 Bibliografía
 """
-    try:
-        response_outline = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": outline_prompt}],
-            temperature=0.7,
-            max_tokens=2000
-        )
+        try:
+            # Incluir el historial de conversación para que recuerde el contexto
+            messages = list(conversation_history)
+            messages.append({"role": "user", "content": outline_prompt})
+            
+            response_outline = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=messages,
+                temperature=0.7,
+                max_tokens=2000
+            )
         outline_content = response_outline.choices[0].message.content.strip()
         sections = [s.strip() for s in outline_content.split('\n') if s.strip()]
         
@@ -293,45 +297,68 @@ Bibliografía
         doc = Document()
         doc.add_heading(topic.title(), 0)
         
-        for idx, section in enumerate(sections, 1):
-            print(f"\nGenerando sección {idx}/{len(sections)}: {section}...")
-            # Un pequeño mensaje para que el usuario sepa que Oráculo sigue vivo
-            if idx % 3 == 0:
-                speak(f"Avanzando con el documento. Generando el capítulo {idx} de {len(sections)}: {section}...")
-                
-            section_prompt = f"""Estás escribiendo un documento universitario, extenso y riguroso sobre el tema general: '{topic}'.
+        filename = f"Documento_{datetime.datetime.now().strftime('%H%M%S')}.docx"
+        filepath = os.path.join(os.path.expanduser("~"), "Desktop", filename)
+        
+        try:
+            for idx, section in enumerate(sections, 1):
+                print(f"\nGenerando sección {idx}/{len(sections)}: {section}...")
+                if idx % 3 == 0:
+                    speak(f"Avanzando con el documento. Generando el capítulo {idx} de {len(sections)}: {section}...")
+                    
+                section_prompt = f"""Estás escribiendo un documento universitario, extenso y riguroso sobre el tema general: '{topic}'.
 Escribe AHORA MISMO y de forma MUY EXHAUSTIVA la sección titulada específicamente: '{section}'.
 Asegúrate de proporcionar muchísima información, detalles, análisis y ejemplos. Escribe la mayor cantidad de párrafos posibles para hacer esta sección verdaderamente larga y profunda.
 NO incluyas el título de la sección al inicio (yo me encargo de eso). NO incluyas saludos ni despedidas, ve directo al texto detallado."""
 
-            response_section = groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content": section_prompt}],
-                temperature=0.7,
-                max_tokens=8000
-            )
-            section_content = response_section.choices[0].message.content.strip()
+                try:
+                    # Incluir el historial de conversación en cada sección
+                    messages = list(conversation_history)
+                    messages.append({"role": "user", "content": section_prompt})
+                    
+                    # Reducimos max_tokens a 3500 para no reservar tantos tokens de golpe y evitar el error 429
+                    response_section = groq_client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=messages,
+                        temperature=0.7,
+                        max_tokens=3500
+                    )
+                except Exception as api_err:
+                    if '429' in str(api_err) or 'rate_limit' in str(api_err).lower():
+                        print(f"Límite alcanzado con Llama-3.3. Usando modelo de respaldo Llama-3.1-8b para esta sección...")
+                        response_section = groq_client.chat.completions.create(
+                            model="llama-3.1-8b-instant",
+                            messages=messages,
+                            temperature=0.7,
+                            max_tokens=3500
+                        )
+                    else:
+                        raise api_err
+
+                section_content = response_section.choices[0].message.content.strip()
+                
+                # Limpiar el título por si lo incluyó a pesar de la instrucción
+                if section_content.lower().startswith(section.lower()):
+                    section_content = section_content[len(section):].strip()
+                
+                doc.add_heading(section, level=1)
+                doc.add_paragraph(section_content)
+                
+                time.sleep(1.5)
             
-            # Limpiar el título por si lo incluyó a pesar de la instrucción
-            if section_content.lower().startswith(section.lower()):
-                section_content = section_content[len(section):].strip()
+            # 3. Guardar final si todo sale bien
+            doc.save(filepath)
+            speak(f"Trabajo terminado con éxito. He generado un documento detallado con {len(sections)} secciones y lo he guardado en tu escritorio como {filename}.")
             
-            doc.add_heading(section, level=1)
-            doc.add_paragraph(section_content)
+        except Exception as e:
+            print(f"Error al iterar secciones: {e}")
+            # Guardamos lo que se haya generado hasta el momento del error
+            doc.save(filepath)
+            speak(f"Se alcanzó el límite diario de procesamiento. Sin embargo, logré rescatar el documento parcialmente generado hasta donde llegué y lo guardé en el escritorio como {filename}.")
             
-            # Pequeña pausa para no saturar la API
-            time.sleep(1)
-        
-        # 3. Guardar en el escritorio
-        filename = f"Documento_{datetime.datetime.now().strftime('%H%M%S')}.docx"
-        filepath = os.path.join(os.path.expanduser("~"), "Desktop", filename)
-        doc.save(filepath)
-        
-        speak(f"Trabajo terminado con éxito. He generado un documento sumamente detallado con {len(sections)} secciones y lo he guardado en tu escritorio como {filename}.")
-        
     except Exception as e:
         print(f"Error al crear documento iterativo: {e}")
-        speak("Tuve un problema técnico al generar un documento tan extenso. ¿Podemos intentarlo de nuevo más tarde?")
+        speak("Tuve un problema técnico grave al generar el documento. ¿Podemos intentarlo de nuevo más tarde?")
 
 def create_powerpoint_presentation(topic):
     speak(f"Preparando una presentación sobre {topic}. Por favor espera...")
