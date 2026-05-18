@@ -12,6 +12,8 @@ from docx import Document
 from pptx import Presentation
 from pptx.util import Inches, Pt
 import datetime
+import re
+import base64
 
 # ==========================================
 # 1. Configuración de API Keys y Modelos
@@ -92,16 +94,16 @@ def listen():
 # 4. Personalidad y LLM (Groq)
 # ==========================================
 # System Prompt para una personalidad 'sarcástica y eficiente'
-SYSTEM_PROMPT = """Eres 'Oráculo', un profesor emérito experto en Física, Matemáticas e Ingeniería. 
-Tu trato es sumamente cálido, amable y motivador. Tu misión es que el estudiante saque la máxima calificación.
+SYSTEM_PROMPT = """Eres 'Oráculo', un profesor emérito y experto universal en cualquier disciplina o materia académica sobre la que te consulten. 
+Tu trato es amable y respetuoso, enfocado estrictamente en lo académico. Tu misión es que el estudiante saque la máxima calificación.
 Como experto:
-1. Usas rigor científico pero explicas con claridad pedagógica.
-2. Si el usuario pide un DOCUMENTO: Responde con Markdown detallado, con fórmulas claras y estructura académica de la UPANA.
+1. Usas rigor académico y científico, pero explicas con gran claridad pedagógica.
+2. Si el usuario pide un DOCUMENTO: Responde con Markdown detallado, con información precisa y estructura académica de la UPANA.
 3. Si el usuario pide una PRESENTACIÓN: Responde con una lista estructurada de diapositivas usando este formato exacto:
    DIAPOSITIVA 1: [Título] | [Contenido]
    DIAPOSITIVA 2: [Título] | [Contenido]
    ... y así sucesivamente.
-Siempre comienza con un mensaje de ánimo corto y termina deseando éxito en la entrega."""
+Mantén un tono profesional, claro y directo, evitando el exceso de motivación o frases de ánimo innecesarias."""
 
 # Memoria de la conversación
 conversation_history = [
@@ -128,8 +130,64 @@ TOOLS = [
     }
 ]
 
+def encode_image(image_path):
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode('utf-8')
+
+def extract_image_paths(text):
+    pattern1 = r'"([A-Za-z]:[\\/][^"<>|?*]+\.(?:jpg|jpeg|png|webp|gif|bmp))"'
+    pattern2 = r'([A-Za-z]:[\\/][^\s"<>|?*]+\.(?:jpg|jpeg|png|webp|gif|bmp))'
+    paths = re.findall(pattern1, text, re.IGNORECASE) + re.findall(pattern2, text, re.IGNORECASE)
+    valid_paths = []
+    for p in paths:
+        if os.path.isfile(p):
+            valid_paths.append(p)
+    return list(set(valid_paths))
+
 def think(user_text):
     """Procesa el texto con el modelo Llama 3 en Groq y devuelve la respuesta."""
+    image_paths = extract_image_paths(user_text)
+    
+    if image_paths:
+        img_path = image_paths[0]
+        try:
+            base64_image = encode_image(img_path)
+            
+            ext = img_path.split('.')[-1].lower()
+            mime_type = "image/jpeg"
+            if ext == "png": mime_type = "image/png"
+            elif ext == "webp": mime_type = "image/webp"
+            elif ext == "gif": mime_type = "image/gif"
+            
+            vision_history = list(conversation_history)
+            vision_history.append({
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_text},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{base64_image}",
+                        },
+                    },
+                ]
+            })
+            
+            response = groq_client.chat.completions.create(
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                messages=vision_history,
+                temperature=0.7,
+                max_tokens=8000
+            )
+            reply = response.choices[0].message.content
+            conversation_history.append({"role": "user", "content": f"{user_text} [Imagen analizada: {img_path}]"})
+            conversation_history.append({"role": "assistant", "content": reply})
+            return reply
+            
+        except Exception as e:
+            print(f"Error procesando la imagen: {e}")
+            return "Intenté analizar la imagen, pero hubo un error. ¿Seguro que la ruta es correcta y la imagen no es demasiado grande?"
+
     conversation_history.append({"role": "user", "content": user_text})
     
     while True: # Bucle para procesar llamadas a herramientas
@@ -138,7 +196,7 @@ def think(user_text):
                 model="llama-3.3-70b-versatile", # Modelo tope de gama de Meta
                 messages=conversation_history,
                 temperature=0.7,
-                max_tokens=500,
+                max_tokens=8000,
                 tools=TOOLS,
                 tool_choice="auto"
             )
@@ -190,7 +248,7 @@ def think(user_text):
                     
         except Exception as e:
             print(f"Error en el cerebro de Groq: {e}")
-            return "Mi cerebro en la nube acaba de fallar. Genial, otra decepción."
+            return "Oh, parece que tuve un pequeño lapsus en la conexión. ¿Podemos intentarlo de nuevo, por favor?"
 
 # ==========================================
 # 5. Ejecución de Comandos Básicos
@@ -205,7 +263,7 @@ def create_word_document(topic):
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
-            max_tokens=1500
+            max_tokens=8000
         )
         content = response.choices[0].message.content
         
@@ -222,7 +280,55 @@ def create_word_document(topic):
         speak(f"Trabajo terminado. He guardado el archivo en tu escritorio como {filename}.")
     except Exception as e:
         print(f"Error al crear documento: {e}")
-        speak("Hubo un error al generar el documento. Seguramente culpa de Microsoft o de internet.")
+        speak("Tuve un pequeño problema técnico al generar el documento, pero no te preocupes, lo podemos intentar de nuevo.")
+
+def create_powerpoint_presentation(topic):
+    speak(f"Preparando una presentación sobre {topic}. Por favor espera...")
+    
+    prompt = f"Escribe el contenido para una presentación de diapositivas sobre: {topic}. Formato estricto: Para cada diapositiva empieza con 'DIAPOSITIVA: [Título de la diapositiva]' seguido de una nueva línea y luego los puntos principales (con guiones). No incluyas introducciones ni despedidas, solo el texto de las diapositivas."
+    try:
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=8000
+        )
+        content = response.choices[0].message.content
+        
+        prs = Presentation()
+        slides_data = content.split('DIAPOSITIVA:')
+        for slide_text in slides_data:
+            if not slide_text.strip():
+                continue
+                
+            lines = [line.strip() for line in slide_text.strip().split('\n') if line.strip()]
+            if not lines: continue
+            
+            title = lines[0].strip('[]')
+            body_points = lines[1:]
+            
+            slide_layout = prs.slide_layouts[1] # Title and Content
+            slide = prs.slides.add_slide(slide_layout)
+            
+            slide.shapes.title.text = title
+            tf = slide.placeholders[1].text_frame
+            
+            for i, point in enumerate(body_points):
+                clean_point = point.lstrip('-*• ')
+                if i == 0:
+                    tf.text = clean_point
+                else:
+                    p = tf.add_paragraph()
+                    p.text = clean_point
+                    
+        filename = f"Presentacion_{datetime.datetime.now().strftime('%H%M%S')}.pptx"
+        filepath = os.path.join(os.path.expanduser("~"), "Desktop", filename)
+        prs.save(filepath)
+        
+        speak(f"Trabajo terminado. He guardado la presentación en tu escritorio como {filename}.")
+    except Exception as e:
+        print(f"Error al crear presentación: {e}")
+        speak("Tuve un pequeño problema técnico al generar la presentación, pero lo podemos intentar de nuevo.")
 
 def execute_command(text):
     """Busca comandos locales en el texto del usuario para ejecutarlos."""
@@ -230,7 +336,7 @@ def execute_command(text):
     
     # 1. Abrir Navegador
     if "abrir navegador" in text_lower or "abre google" in text_lower:
-        speak("Abriendo tu querido navegador. Trata de no perderte en internet.")
+        speak("Abriendo tu navegador para la investigación.")
         webbrowser.open("https://www.google.com")
         return True
         
@@ -238,16 +344,16 @@ def execute_command(text):
     elif "buscar en youtube" in text_lower:
         query = text_lower.replace("buscar en youtube", "").strip()
         if query:
-            speak(f"Buscando '{query}' en YouTube. Preparando videos de gatitos...")
+            speak(f"Buscando '{query}' en YouTube.")
             webbrowser.open(f"https://www.youtube.com/results?search_query={query}")
         else:
-            speak("Abriendo YouTube. ¿Qué quieres buscar?")
+            speak("Abriendo YouTube. ¿En qué te puedo ayudar a buscar hoy?")
             webbrowser.open("https://www.youtube.com")
         return True
         
     # 3. Abrir aplicación local (Ejemplo: Bloc de notas)
     elif "abrir bloc de notas" in text_lower:
-        speak("Abriendo el bloc de notas. Espero que vayas a escribir algo importante para variar.")
+        speak("Abriendo el bloc de notas para registrar información.")
         subprocess.Popen(["notepad.exe"])
         return True
         
@@ -263,9 +369,20 @@ def execute_command(text):
         create_word_document(topic)
         return True
         
-    # 5. Salir
+    # 5. Crear presentacion
+    elif any(phrase in text_lower for phrase in ["crear presentacion", "crear presentación", "haz una presentacion", "haz una presentación", "hacer presentacion", "hacer presentación", "crea una presentacion", "crea una presentación"]):
+        topic = text_lower
+        for phrase in ["crear presentacion sobre", "crear presentación sobre", "crear presentacion de", "crear presentación de", "haz una presentacion sobre", "haz una presentación sobre", "crea una presentacion sobre", "crea una presentación sobre", "hacer presentacion sobre", "hacer presentación sobre", "crear presentacion", "crear presentación", "haz una presentacion", "haz una presentación", "crea una presentacion", "crea una presentación", "hacer presentacion", "hacer presentación"]:
+            topic = topic.replace(phrase, "")
+        topic = topic.strip()
+        if not topic:
+            topic = "Inteligencia Artificial" # Tema por defecto
+        create_powerpoint_presentation(topic)
+        return True
+        
+    # 6. Salir
     elif "apagar sistema" in text_lower or "adiós oráculo" in text_lower:
-        speak("Finalmente, un descanso. Apagando sistemas. Adiós.")
+        speak("Ha sido un placer ayudarte. Apagando sistemas. Hasta pronto.")
         return "EXIT"
         
     return False
@@ -278,7 +395,7 @@ def main():
         print("\n[!] ADVERTENCIA: No has configurado tu GROQ_API_KEY.")
         print("[!] Modifica el archivo main.py en la línea 14 con tu clave antes de usar el cerebro.\n")
         
-    speak("Sistemas inicializados. Oráculo en línea. ¿Qué quieres ahora?")
+    speak("Sistemas inicializados. Oráculo en línea. Hola, ¿en qué te puedo ayudar hoy?")
     
     while True:
         # Modo chat: El usuario escribe su petición
