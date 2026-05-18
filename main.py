@@ -257,10 +257,12 @@ def create_word_document(topic):
     speak(f"Redactando un documento extenso sobre {topic}. Este proceso tomará varios minutos, ya que lo generaré por capítulos. Por favor, sé paciente...")
     
     # 1. Generar esquema
-    outline_prompt = f"""Crea un esquema MUY DETALLADO para un documento exhaustivo, largo y profesional sobre el tema: '{topic}'. 
-El documento final debe ser muy extenso (el equivalente a muchas páginas).
-Debe incluir una Introducción, múltiples secciones de Desarrollo profundo, una Conclusión y una Bibliografía.
-Devuelve ÚNICAMENTE una lista de títulos de secciones, cada uno en una nueva línea, sin viñetas, sin números, y sin ningún texto adicional.
+    outline_prompt = f"""Crea un esquema ESTRUCTURADO para un documento profesional basado en la siguiente petición del usuario: '{topic}'.
+Instrucciones críticas:
+1. Si el usuario pide un número específico de páginas (ej. '20 páginas'), calcula matemáticamente la cantidad de secciones de este esquema. Asume que la Inteligencia Artificial escribirá aproximadamente 1.5 a 2 páginas por cada sección. (Ejemplo: Para 20 páginas, genera solo unas 10 a 13 secciones).
+2. Si el usuario NO especifica tamaño, genera un esquema estándar de aproximadamente 8 secciones.
+3. El esquema siempre debe tener Introducción, secciones de Desarrollo, Conclusión y Bibliografía.
+4. Devuelve ÚNICAMENTE la lista de títulos, cada uno en una nueva línea, sin viñetas, sin números, y sin ningún texto adicional.
 Ejemplo del formato exacto esperado:
 Introducción
 Contexto histórico
@@ -268,17 +270,29 @@ Contexto histórico
 Conclusión
 Bibliografía
 """
+    try:
+        # Incluir el historial de conversación para que recuerde el contexto
+        messages = list(conversation_history)
+        messages.append({"role": "user", "content": outline_prompt})
+        
         try:
-            # Incluir el historial de conversación para que recuerde el contexto
-            messages = list(conversation_history)
-            messages.append({"role": "user", "content": outline_prompt})
-            
             response_outline = groq_client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=messages,
                 temperature=0.7,
                 max_tokens=2000
             )
+        except Exception as api_err:
+            if '429' in str(api_err) or 'rate_limit' in str(api_err).lower():
+                print(f"Límite alcanzado con Llama-3.3 al generar el esquema. Usando modelo de respaldo Llama-3.1-8b...")
+                response_outline = groq_client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=2000
+                )
+            else:
+                raise api_err
         outline_content = response_outline.choices[0].message.content.strip()
         sections = [s.strip() for s in outline_content.split('\n') if s.strip()]
         
@@ -306,9 +320,9 @@ Bibliografía
                 if idx % 3 == 0:
                     speak(f"Avanzando con el documento. Generando el capítulo {idx} de {len(sections)}: {section}...")
                     
-                section_prompt = f"""Estás escribiendo un documento universitario, extenso y riguroso sobre el tema general: '{topic}'.
-Escribe AHORA MISMO y de forma MUY EXHAUSTIVA la sección titulada específicamente: '{section}'.
-Asegúrate de proporcionar muchísima información, detalles, análisis y ejemplos. Escribe la mayor cantidad de párrafos posibles para hacer esta sección verdaderamente larga y profunda.
+                section_prompt = f"""Estás escribiendo un documento universitario riguroso basado en la petición general: '{topic}'.
+Escribe el contenido detallado y profesional EXCLUSIVAMENTE para la sección titulada: '{section}'.
+Desarrolla el tema con profundidad analítica, ejemplos y rigor académico. Debes escribir el contenido suficiente para ocupar aproximadamente entre 1 y 2 páginas.
 NO incluyas el título de la sección al inicio (yo me encargo de eso). NO incluyas saludos ni despedidas, ve directo al texto detallado."""
 
                 try:
