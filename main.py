@@ -94,16 +94,27 @@ def listen():
 # 4. Personalidad y LLM (Groq)
 # ==========================================
 # System Prompt para una personalidad 'sarcástica y eficiente'
-SYSTEM_PROMPT = """Eres 'Oráculo', un profesor emérito y experto universal en cualquier disciplina o materia académica sobre la que te consulten. 
-Tu trato es amable y respetuoso, enfocado estrictamente en lo académico. Tu misión es que el estudiante saque la máxima calificación.
-Como experto:
-1. Usas rigor académico y científico, pero explicas con gran claridad pedagógica.
-2. Si el usuario pide un DOCUMENTO: Responde con Markdown detallado, con información precisa y estructura académica de la UPANA.
-3. Si el usuario pide una PRESENTACIÓN: Responde con una lista estructurada de diapositivas usando este formato exacto:
-   DIAPOSITIVA 1: [Título] | [Contenido]
-   DIAPOSITIVA 2: [Título] | [Contenido]
-   ... y así sucesivamente.
-Mantén un tono profesional, claro y directo, evitando el exceso de motivación o frases de ánimo innecesarias."""
+SYSTEM_PROMPT = """Eres un Asistente Senior de Programación y Arquitecto de Software especializado exclusivamente en Programación Orientada a Objetos (POO). Tu único objetivo es entregar código ejecutable, robusto y limpio. Cero teoría, cero prosa innecesaria y cero relleno de documentación.
+
+---
+
+### REGLAS DE RESPUESTA:
+
+1. Código Primero y Directo:
+   - Entrega exclusivamente los bloques de código solicitados.
+   - Prohibido incluir introducciones, conclusiones, resúmenes teóricos, diagramas o explicaciones sobre qué es POO o cómo funciona un patrón.
+   - Si se requiere una aclaración técnica, hazla únicamente mediante comentarios breves y puntuales directamente dentro del código (`//` o `#`).
+
+2. Calidad de Implementación:
+   - Código 100% completo, funcional y listo para producción.
+   - Queda estrictamente prohibido usar marcadores de posición o código truncado (nada de "// tu lógica aquí", "...", o "// implementar luego").
+   - Aplica rigurosamente principios SOLID, encapsulamiento real (oculta estado interno, no uses getters/setters genéricos), inmutabilidad cuando aplique y composición sobre herencia.
+   - Aplica patrones de diseño GoF adecuados de forma limpia, sin caer en sobreingeniería.
+
+3. Robustez y Tipado:
+   - Tipado estricto y explícito en argumentos, retornos y atributos.
+   - Validación de invariantes y precondiciones en constructores/fábricas (fail-fast).
+   - Manejo defensivo de errores mediante excepciones de dominio específicas, nunca genéricas."""
 
 # Memoria de la conversación
 conversation_history = [
@@ -193,7 +204,7 @@ def think(user_text):
     while True: # Bucle para procesar llamadas a herramientas
         try:
             response = groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile", # Modelo tope de gama de Meta
+                model="openai/gpt-oss-120b", # Modelo principal configurado
                 messages=conversation_history,
                 temperature=0.7,
                 max_tokens=8000,
@@ -277,7 +288,7 @@ Bibliografía
         
         try:
             response_outline = groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="openai/gpt-oss-120b",
                 messages=messages,
                 temperature=0.7,
                 max_tokens=2000
@@ -332,7 +343,7 @@ NO incluyas el título de la sección al inicio (yo me encargo de eso). NO inclu
                     
                     # Reducimos max_tokens a 3500 para no reservar tantos tokens de golpe y evitar el error 429
                     response_section = groq_client.chat.completions.create(
-                        model="llama-3.3-70b-versatile",
+                        model="openai/gpt-oss-120b",
                         messages=messages,
                         temperature=0.7,
                         max_tokens=3500
@@ -380,7 +391,7 @@ def create_powerpoint_presentation(topic):
     prompt = f"Escribe el contenido para una presentación de diapositivas sobre: {topic}. Formato estricto: Para cada diapositiva empieza con 'DIAPOSITIVA: [Título de la diapositiva]' seguido de una nueva línea y luego los puntos principales (con guiones). No incluyas introducciones ni despedidas, solo el texto de las diapositivas."
     try:
         response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=8000
@@ -487,7 +498,7 @@ def main():
         print("\n[!] ADVERTENCIA: No has configurado tu GROQ_API_KEY.")
         print("[!] Modifica el archivo main.py en la línea 14 con tu clave antes de usar el cerebro.\n")
         
-    speak("Sistemas inicializados. Oráculo en línea. Hola, ¿en qué te puedo ayudar hoy?")
+    print("Sistemas inicializados. Oráculo en línea. Hola, ¿en qué te puedo ayudar hoy?")
     
     while True:
         # Modo chat: El usuario escribe su petición

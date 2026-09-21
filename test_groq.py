@@ -9,7 +9,7 @@ print("Iniciando prueba de Groq...")
 try:
     client = Groq(api_key=API_KEY)
     response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         messages=[{"role": "user", "content": "hola"}],
     )
     print("Éxito! Respuesta:", response.choices[0].message.content)
